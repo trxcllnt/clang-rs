@@ -1,0 +1,79 @@
+# Configuration for building the Linux targets with `cross`
+# (https://github.com/cross-rs/cross), e.g.:
+#
+#   cross test -p clang-rs-sys --features vendored --target aarch64-unknown-linux-musl
+#
+# The `main` images ship GCC toolchains that are recent enough for LLVM
+# (GCC >= 7.4) and CMake >= 3.20. LLVM's build additionally needs Python 3,
+# and Ninja makes it considerably faster.
+
+[build]
+pre-build = [
+    "apt-get update && apt-get install --assume-yes --no-install-recommends python3 ninja-build",
+]
+
+[build.env]
+# Paths are mounted into the container at the same location. They are listed
+# under `passthrough` as well because cross 0.2.5 mounts volumes without
+# setting the variable itself.
+volumes = [
+    "CLANG_RS_SRC_CACHE_DIR",
+    "CLANG_RS_SRC_DOWNLOAD_DIR",
+    "CLANG_RS_SRC_BUILD_DIR",
+    "CLANG_RS_SRC_LLVM_SOURCE_DIR",
+    "CLANG_RS_SRC_LLVM_TARBALL",
+]
+passthrough = [
+    "CLANG_RS_SRC_CACHE_DIR",
+    "CLANG_RS_SRC_DOWNLOAD_DIR",
+    "CLANG_RS_SRC_BUILD_DIR",
+    "CLANG_RS_SRC_LLVM_SOURCE_DIR",
+    "CLANG_RS_SRC_LLVM_TARBALL",
+    "CLANG_RS_SRC_LLVM_URL",
+    "CLANG_RS_SRC_LIBFFI_URL",
+    "CLANG_RS_SRC_NCURSES_URL",
+    "CLANG_RS_SRC_OFFLINE",
+    "CLANG_RS_SRC_LLVM_TARGETS",
+    "CLANG_RS_SRC_CMAKE_ARGS",
+    "CLANG_RS_SRC_STATIC_CXX_STDLIB",
+]
+
+[target.aarch64-unknown-linux-gnu]
+image = "ghcr.io/cross-rs/aarch64-unknown-linux-gnu:main"
+
+[target.aarch64-unknown-linux-musl]
+image = "ghcr.io/cross-rs/aarch64-unknown-linux-musl:main"
+
+[target.armv7-unknown-linux-musleabi]
+image = "ghcr.io/cross-rs/armv7-unknown-linux-musleabi:main"
+
+[target.i686-unknown-linux-musl]
+image = "ghcr.io/cross-rs/i686-unknown-linux-musl:main"
+
+[target.loongarch64-unknown-linux-musl]
+image = "ghcr.io/cross-rs/loongarch64-unknown-linux-musl:main"
+
+[target.riscv64gc-unknown-linux-musl]
+image = "ghcr.io/cross-rs/riscv64gc-unknown-linux-musl:main"
+
+[target.s390x-unknown-linux-gnu]
+image = "ghcr.io/cross-rs/s390x-unknown-linux-gnu:main"
+
+# A tier 3 Rust target: there is neither a prebuilt image nor a prebuilt
+# standard library, so it needs a nightly toolchain with rust-src, and a
+# `cross` built from git (the 0.2.5 release ignores `dockerfile` tables):
+#
+#   cargo install cross --git https://github.com/cross-rs/cross
+#   cross +nightly test -p clang-rs-sys --features vendored --target s390x-unknown-linux-musl
+[target.s390x-unknown-linux-musl]
+build-std = true
+
+[target.s390x-unknown-linux-musl.dockerfile]
+file = "docker/s390x-unknown-linux-musl.Dockerfile"
+context = "docker"
+
+[target.x86_64-unknown-linux-musl]
+image = "ghcr.io/cross-rs/x86_64-unknown-linux-musl:main"
+
+[target.x86_64-unknown-linux-gnu]
+image = "ghcr.io/cross-rs/x86_64-unknown-linux-gnu:main"

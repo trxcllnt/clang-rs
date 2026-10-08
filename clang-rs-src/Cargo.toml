@@ -1,0 +1,40 @@
+[package]
+name = "clang-rs-src"
+version = "0.1.0"
+description = """
+Builds libclang (and the Clang/LLVM libraries it depends on), libffi and
+ncurses from source as static libraries, for use by -sys crates.
+"""
+readme = "README.md"
+keywords = ["clang", "libclang", "llvm", "static", "vendored"]
+categories = ["development-tools::build-utils", "external-ffi-bindings"]
+edition.workspace = true
+rust-version = "1.85"
+license.workspace = true
+include = ["/src", "/README.md", "/LICENSE-*"]
+
+[features]
+# Build every LLVM backend instead of only the one for the target architecture.
+all-targets = []
+
+# Select the LLVM/Clang release to build: the newest release of that major
+# version. Like clang-sys's features, each one implies the older ones, and the
+# highest enabled feature wins. Without any, the newest release is built.
+clang_14_0 = []
+clang_15_0 = ["clang_14_0"]
+clang_16_0 = ["clang_15_0"]
+clang_17_0 = ["clang_16_0"]
+clang_18_0 = ["clang_17_0"]
+clang_19_0 = ["clang_18_0"]
+clang_20_0 = ["clang_19_0"]
+clang_21_0 = ["clang_20_0"]
+clang_22_0 = ["clang_21_0"]
+clang_23_0 = ["clang_22_0"]
+
+[dependencies]
+cc = "1.2.20"
+filetime = "0.2"
+flate2 = "1"
+liblzma = { version = "0.4", features = ["static"] }
+sha2 = "0.10"
+tar = { version = "0.4", default-features = false }

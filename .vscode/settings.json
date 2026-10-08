@@ -1,0 +1,28 @@
+{
+    // Don't start the rust-analyzer server automatically.
+    // Users probably don't want their intellisense engine
+    // to build libclang automatically.
+    "rust-analyzer.initializeStopped": true,
+
+    "rust-analyzer.cargo.extraEnv": {
+        "CLANG_RS_SRC_CACHE_DIR": "${workspaceFolder}/.cache/clang-rs-src",
+    },
+    "rust-analyzer.check.extraEnv": {
+        "CLANG_RS_SRC_CACHE_DIR": "${workspaceFolder}/.cache/clang-rs-src",
+    },
+    "rust-analyzer.server.extraEnv": {
+        "CLANG_RS_SRC_CACHE_DIR": "${workspaceFolder}/.cache/clang-rs-src",
+    },
+    "rust-analyzer.runnables.extraEnv": {
+        "CLANG_RS_SRC_CACHE_DIR": "${workspaceFolder}/.cache/clang-rs-src",
+    },
+
+    //
+    // These may also be of interest
+    //
+    // "rust-analyzer.cachePriming.enable": false,
+    // "rust-analyzer.cargo.autoreload": false,
+    // "rust-analyzer.cargo.buildScripts.enable": false,
+    // "rust-analyzer.checkOnSave": false,
+    // "rust-analyzer.cargo.buildScripts.rebuildOnSave": false,
+}

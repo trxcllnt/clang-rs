@@ -1,0 +1,171 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup update stable && rustup default stable && rustup component add rustfmt clippy
+      - run: cargo fmt --all --check
+      # Without a version feature, the API of the newest libclang is declared
+      # (DOCS_RS keeps the build script from detecting a system libclang).
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+        env:
+          DOCS_RS: "1"
+      # The API of every other version must compile, too.
+      - name: clippy (each libclang version)
+        run: |
+          for feature in $(grep -o '^clang_[0-9]*_0' clang-rs-sys/Cargo.toml); do
+            echo "::group::$feature"
+            cargo clippy -p clang-rs-sys --all-targets --features $feature -- -D warnings
+            echo "::endgroup::"
+          done
+      # DOCS_RS makes the build script skip building LLVM.
+      - run: cargo clippy --workspace --all-targets --features clang-rs-sys/vendored -- -D warnings
+        env:
+          DOCS_RS: "1"
+      - run: cargo test -p clang-rs-src
+
+  msrv:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup update stable && rustup toolchain install 1.74 1.85 --profile minimal
+      # Pick dependency versions that support the MSRVs.
+      - run: cargo +stable generate-lockfile
+        env:
+          CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS: fallback
+      # clang-rs-sys without `vendored` supports Rust 1.74 (with the newest and
+      # the oldest libclang API) ...
+      - run: cargo +1.74 check -p clang-rs-sys --all-targets
+      - run: cargo +1.74 check -p clang-rs-sys --all-targets --features clang_14_0
+      # ... while clang-rs-src, which `vendored` builds, needs 1.85 (reqwest).
+      - run: cargo +1.85 check -p clang-rs-src --all-targets
+
+  # Links Ubuntu's libclang 18 without a version feature: the build script
+  # has to detect its version and declare its API (the tests check both).
+  system:
+    name: system libclang
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup update stable && rustup default stable
+      - run: sudo apt-get update && sudo apt-get install --yes libclang-18-dev llvm-18
+      - name: Test (found through LIBCLANG_PATH)
+        run: cargo test -p clang-rs-sys
+        env:
+          LIBCLANG_PATH: /usr/lib/llvm-18/lib
+      - name: Test (found through llvm-config)
+        run: cargo test -p clang-rs-sys
+        env:
+          LLVM_CONFIG_PATH: /usr/bin/llvm-config-18
+
+  # Builds libclang from source for every supported target and runs the
+  # tests of clang-rs-sys against it (under QEMU for foreign Linux targets).
+  vendored:
+    name: vendored (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: x86_64-unknown-linux-gnu, os: ubuntu-24.04, cross: true }
+          - { target: x86_64-unknown-linux-musl, os: ubuntu-24.04, cross: true }
+          - { target: aarch64-unknown-linux-gnu, os: ubuntu-24.04, cross: true }
+          - { target: aarch64-unknown-linux-musl, os: ubuntu-24.04, cross: true }
+          - { target: armv7-unknown-linux-musleabi, os: ubuntu-24.04, cross: true }
+          - { target: i686-unknown-linux-musl, os: ubuntu-24.04, cross: true }
+          - { target: loongarch64-unknown-linux-musl, os: ubuntu-24.04, cross: true }
+          - { target: riscv64gc-unknown-linux-musl, os: ubuntu-24.04, cross: true }
+          - { target: s390x-unknown-linux-gnu, os: ubuntu-24.04, cross: true }
+          # Tier 3: needs a nightly toolchain to build std (see Cross.toml).
+          - { target: s390x-unknown-linux-musl, os: ubuntu-24.04, cross: true, toolchain: nightly }
+          - { target: aarch64-apple-darwin, os: macos-15 }
+          # Cross compiled on Apple Silicon; the tests run under Rosetta 2.
+          - { target: x86_64-apple-darwin, os: macos-15 }
+          - { target: x86_64-pc-windows-msvc, os: windows-2025 }
+          - { target: aarch64-pc-windows-msvc, os: windows-11-arm }
+    env:
+      CLANG_RS_SRC_CACHE_DIR: ${{ github.workspace }}/.clang-rs-src-cache
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        shell: bash
+        run: |
+          toolchain=${{ matrix.toolchain || 'stable' }}
+          rustup toolchain install $toolchain --profile minimal
+          rustup default $toolchain
+          if [ "$toolchain" = nightly ]; then
+            rustup component add rust-src
+          else
+            rustup target add ${{ matrix.target }}
+          fi
+
+      # LLVM's CMake configuration needs Python 3 (cross installs it in its
+      # images through Cross.toml).
+      - uses: actions/setup-python@v5
+        if: ${{ !matrix.cross }}
+        with:
+          python-version: "3.x"
+
+      - name: Install cross
+        if: matrix.cross
+        run: cargo install cross --git https://github.com/cross-rs/cross --locked
+
+      - name: Install Ninja (macOS)
+        if: runner.os == 'macOS'
+        run: brew install ninja
+
+      # Downloads, unpacked sources and finished builds of clang-rs-src.
+      - uses: actions/cache@v4
+        with:
+          path: .clang-rs-src-cache
+          key: clang-rs-src-${{ matrix.target }}-${{ hashFiles('clang-rs-src/src/**') }}
+          restore-keys: clang-rs-src-${{ matrix.target }}-
+
+      # Without a version feature: the newest release and its API.
+      - name: Build and test
+        shell: bash
+        run: |
+          mkdir -p "$CLANG_RS_SRC_CACHE_DIR"
+          if [ "${{ matrix.cross }}" = true ]; then
+            cross test -p clang-rs-sys --features vendored --target ${{ matrix.target }}
+          else
+            cargo test -p clang-rs-sys --features vendored --target ${{ matrix.target }}
+          fi
+
+  # Builds and tests each older supported LLVM release (the newest one is
+  # covered by the target matrix above).
+  llvm-versions:
+    name: vendored (LLVM ${{ matrix.llvm }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        llvm: [14, 15, 16, 17, 18, 19, 20, 21, 22]
+    env:
+      CLANG_RS_SRC_CACHE_DIR: ${{ github.workspace }}/.clang-rs-src-cache
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup update stable && rustup default stable
+      - run: sudo apt-get update && sudo apt-get install --yes ninja-build
+      - uses: actions/cache@v4
+        with:
+          path: .clang-rs-src-cache
+          key: clang-rs-src-llvm${{ matrix.llvm }}-${{ hashFiles('clang-rs-src/src/**') }}
+          restore-keys: clang-rs-src-llvm${{ matrix.llvm }}-
+      - run: |
+          mkdir -p "$CLANG_RS_SRC_CACHE_DIR"
+          cargo test -p clang-rs-sys --features vendored,clang_${{ matrix.llvm }}_0

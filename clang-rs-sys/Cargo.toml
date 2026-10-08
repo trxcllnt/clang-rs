@@ -1,0 +1,56 @@
+[package]
+name = "clang-rs-sys"
+version = "0.1.0"
+description = """
+Raw FFI bindings to libclang. With the `vendored` feature, libclang and its
+dependencies (LLVM, libffi, ncurses) are built from source and linked
+statically.
+"""
+links = "clang_rs"
+build = "build/main.rs"
+readme = "README.md"
+keywords = ["clang", "libclang", "llvm", "ffi", "bindings"]
+categories = ["external-ffi-bindings", "development-tools"]
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+# The libclang documentation contains C snippets that rustdoc would try to
+# compile as Rust doctests.
+doctest = false
+
+[features]
+# Build libclang, LLVM, libffi and ncurses from source for the target and link
+# them statically, instead of linking the system's libclang dynamically.
+vendored = ["dep:clang-rs-src", "dep:flate2"]
+# With `vendored`: build every LLVM backend instead of only the target's.
+all-targets = ["clang-rs-src?/all-targets"]
+
+# The libclang version whose API is declared: functions, types and constants
+# that are not in every supported version are only declared for the versions
+# that have them, and constants have the value of the selected version. Like
+# clang-sys's features, each one implies the older ones, so the highest one
+# counts. With `vendored`, the selected version is also the LLVM release that
+# is built. Without any of them, the API of the libclang that is linked is
+# declared: the newest release with `vendored`, otherwise the version of the
+# system libclang, which the build script detects.
+clang_14_0 = ["clang-rs-src?/clang_14_0"]
+clang_15_0 = ["clang_14_0", "clang-rs-src?/clang_15_0"]
+clang_16_0 = ["clang_15_0", "clang-rs-src?/clang_16_0"]
+clang_17_0 = ["clang_16_0", "clang-rs-src?/clang_17_0"]
+clang_18_0 = ["clang_17_0", "clang-rs-src?/clang_18_0"]
+clang_19_0 = ["clang_18_0", "clang-rs-src?/clang_19_0"]
+clang_20_0 = ["clang_19_0", "clang-rs-src?/clang_20_0"]
+clang_21_0 = ["clang_20_0", "clang-rs-src?/clang_21_0"]
+clang_22_0 = ["clang_21_0", "clang-rs-src?/clang_22_0"]
+clang_23_0 = ["clang_22_0", "clang-rs-src?/clang_23_0"]
+
+[dependencies]
+# Decompresses the builtin headers `install_builtin_headers` installs.
+flate2 = { version = "1", optional = true }
+
+[build-dependencies]
+clang-rs-src = { version = "0.1.0", path = "../clang-rs-src", optional = true }
+# Compresses the builtin headers `install_builtin_headers` embeds.
+flate2 = { version = "1", optional = true }
